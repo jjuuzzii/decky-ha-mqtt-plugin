@@ -21,19 +21,16 @@ HTPCs) that connects your device to MQTT and Home Assistant:
 
 ## Screenshots
 
-![MQTT Connection Settings](screenshots/screenshot_1.jpg)
-*Connection Settings in the Decky Menu*
-
 ![Live Status & Options](screenshots/screenshot_2.jpg)
 *Live Status & MQTT Discovery Toggle*
 
 ![SteamOS Quick Settings](screenshots/screenshot_3.jpg)
 *Integrated volume control (+/- buttons) in the Quick Access Menu*
 
-![Home Assistant Dashboard](screenshots/screenshot_4.png)
+![Home Assistant Dashboard](screenshots/screenshot_4.png) ![Screenshot 5](screenshots/screenshot_5.png)
 *The final device overview in Home Assistant including all sensors, power buttons, and volume events*
 
-![Screenshot 5](screenshots/screenshot_5.jpg)
+
 
 ## Requirements
 
