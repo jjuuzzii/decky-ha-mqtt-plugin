@@ -1,0 +1,11 @@
+{
+  "name": "MQTT Status",
+  "author": "Julian",
+  "flags": ["debug"],
+  "api_version": 1,
+  "publish": {
+    "tags": ["mqtt", "home-assistant", "audio", "system-status", "wake-on-lan"],
+    "description": "Publishes system status (CPU/GPU/RAM/disk/network/temps) and real-time volume changes to MQTT with Home Assistant auto-discovery. Adds relative +/- volume buttons in Game Mode that forward every press as an MQTT event, plus suspend/shutdown/reboot/wake buttons in Home Assistant.",
+    "image": ""
+  }
+}

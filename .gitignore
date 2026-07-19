@@ -1,0 +1,11 @@
+node_modules/
+dist/
+py_modules/*
+!py_modules/.gitkeep
+!py_modules/audio_volume.py
+!py_modules/cec_control.py
+!py_modules/mqtt_client.py
+!py_modules/plugin_settings.py
+!py_modules/system_stats.py
+*.log
+.DS_Store
