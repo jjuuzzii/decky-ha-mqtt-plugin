@@ -71,13 +71,23 @@ class AudioVolumeMonitor:
         self._last = (level, muted)
         asyncio.run_coroutine_threadsafe(self._on_change(level, muted), self._loop)
 
-    def _run(self):
-        # Publish the initial value once on startup.
-        level, muted = get_current()
-        self._emit(level, muted)
+    def kick(self):
+        """Force a resubscribe + re-publish, e.g. after suspend/resume left the
+        pactl connection stale."""
+        self._last = (None, None)
+        if self._proc is not None:
+            try:
+                self._proc.terminate()
+            except Exception:
+                pass
 
+    def _run(self):
         backoff = 1
         while not self._stop_event.is_set():
+            # (Re-)publish the current value on every (re)subscribe, so state
+            # is fresh after startup and after resume-triggered restarts.
+            level, muted = get_current()
+            self._emit(level, muted)
             try:
                 self._proc = subprocess.Popen(
                     ["pactl", "subscribe"],

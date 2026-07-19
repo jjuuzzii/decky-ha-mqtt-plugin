@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import time
 
 import decky
 
@@ -46,11 +47,14 @@ class Plugin:
                 decky.logger.exception("Failed to start ExternalVolume server on boot")
 
         self._stats_task = self.loop.create_task(self._stats_loop())
+        self._resume_task = self.loop.create_task(self._resume_watch())
         decky.logger.info("MQTT Status plugin started")
 
     async def _unload(self):
         if hasattr(self, "_stats_task"):
             self._stats_task.cancel()
+        if hasattr(self, "_resume_task"):
+            self._resume_task.cancel()
         if hasattr(self, "volume_monitor"):
             self.volume_monitor.stop()
         if hasattr(self, "ext_volume"):
@@ -77,6 +81,37 @@ class Plugin:
                 decky.logger.exception("Failed to collect/publish system stats")
             interval = max(5, int(self.settings.get("publish_interval", 15)))
             await asyncio.sleep(interval)
+
+    async def _resume_watch(self):
+        """Detect suspend/resume via wall-clock jumps and refresh stale connections.
+
+        asyncio timers use CLOCK_MONOTONIC, which pauses during suspend — so a big
+        wall-clock delta across one sleep tick means the machine just woke up.
+        """
+        interval = 5
+        last_wall = time.time()
+        while True:
+            await asyncio.sleep(interval)
+            now_wall = time.time()
+            if now_wall - last_wall > interval + 45:
+                decky.logger.info("Resume from suspend detected, refreshing connections")
+                try:
+                    await self._on_resume()
+                except Exception:
+                    decky.logger.exception("Resume refresh failed")
+            last_wall = time.time()
+
+    async def _on_resume(self):
+        # Give the network and audio stack a moment to settle.
+        await asyncio.sleep(5)
+        # WirePlumber's external-volume route and the pactl subscription go stale
+        # across suspend — the same fix as the manual "Restart audio service" button.
+        if self.settings.get("volume_buttons_enabled"):
+            await self.loop.run_in_executor(None, external_volume.restart_wireplumber)
+        self.volume_monitor.kick()
+        # Force a clean MQTT reconnect; on_connect republishes availability,
+        # discovery and retained state.
+        self.mqtt.connect(self.settings)
 
     async def _handle_volume_change(self, level: int, muted: bool):
         self.mqtt.publish_volume(level, muted)

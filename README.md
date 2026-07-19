@@ -19,19 +19,6 @@ HTPCs) that connects your device to MQTT and Home Assistant:
 
 > Built with the help of AI (Claude Code). Not affiliated with Valve.
 
-## Screenshots
-
-![Live Status & Options](screenshots/screenshot_2.jpg)
-*Live Status & MQTT Discovery Toggle*
-
-![SteamOS Quick Settings](screenshots/screenshot_3.jpg)
-*Integrated volume control (+/- buttons) in the Quick Access Menu*
-
-![Home Assistant Dashboard](screenshots/screenshot_4.png) ![Screenshot 5](screenshots/screenshot_5.png)
-*The final device overview in Home Assistant including all sensors, power buttons, and volume events*
-
-
-
 ## Requirements
 
 - SteamOS 3.x with [Decky Loader](https://decky.xyz/) installed
