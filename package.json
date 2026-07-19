@@ -1,6 +1,6 @@
 {
   "name": "decky-mqtt-status",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Decky plugin: publishes Steam Deck system status and volume changes to MQTT in real time, plus a toggle for HDMI-CEC (TV/receiver) relative volume mode.",
   "type": "module",
   "scripts": {
