@@ -148,6 +148,14 @@ class MqttManager:
             self.topic("volume/button"), json.dumps({"event_type": kind}), qos=0, retain=False
         )
 
+    def publish_guide_button(self, kind: str):
+        # kind: "press"
+        if not self._connected:
+            return
+        self._client.publish(
+            self.topic("guide_button"), json.dumps({"event_type": kind}), qos=0, retain=False
+        )
+
     # -- Home Assistant MQTT discovery --------------------------------------
     def _discovery_topic(self, component: str, object_id: str) -> str:
         prefix = self._settings.get("ha_discovery_prefix", "homeassistant").strip("/")
@@ -340,6 +348,18 @@ class MqttManager:
             "icon": "mdi:remote",
             "state_topic": self.topic("volume/button"),
             "event_types": ["volume_up", "volume_down", "mute_toggle"],
+        })
+        self._publish_entity("event", "guide_button", {
+            "name": "Guide Button",
+            "icon": "mdi:steam",
+            "state_topic": self.topic("guide_button"),
+            "event_types": ["press"],
+        })
+        self._publish_entity("binary_sensor", "docked", {
+            "name": "Docked",
+            "icon": "mdi:dock-window",
+            "state_topic": stats_topic,
+            "value_template": "{{ 'ON' if value_json.docked else 'OFF' }}",
         })
         # Clean up entities from older plugin versions.
         self._clear_entity("switch", "cec_mode")

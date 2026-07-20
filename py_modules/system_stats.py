@@ -62,6 +62,29 @@ def _gpu_busy_percent():
     return None
 
 
+_IGNORED_CONNECTOR_PREFIXES = ("edp", "writeback", "virtual", "dsi")
+
+
+def is_docked() -> bool:
+    """True if any external display connector (HDMI/DP/...) is active.
+
+    The internal panel (eDP) is excluded, so this reflects being connected to a
+    dock/TV/monitor rather than just "a screen is on".
+    """
+    for status_path in glob.glob("/sys/class/drm/*/status"):
+        connector = os.path.basename(os.path.dirname(status_path))
+        name = connector.split("-", 1)[1] if "-" in connector else connector
+        if name.lower().startswith(_IGNORED_CONNECTOR_PREFIXES):
+            continue
+        try:
+            with open(status_path) as f:
+                if f.read().strip() == "connected":
+                    return True
+        except OSError:
+            continue
+    return False
+
+
 def _cpu_temp_c():
     try:
         temps = psutil.sensors_temperatures()
@@ -101,6 +124,7 @@ def collect() -> dict:
     net_down, net_up = _net_rates_kbps()
 
     return {
+        "docked": is_docked(),
         "net_down_kbps": net_down,
         "net_up_kbps": net_up,
         "ip_address": _ip_address(),

@@ -49,6 +49,7 @@ interface Stats {
   net_down_kbps: number | null;
   net_up_kbps: number | null;
   uptime_s: number;
+  docked: boolean;
 }
 
 interface ActionResult {
@@ -79,6 +80,7 @@ function Content() {
   const [buttonsEnabled, setButtonsEnabled] = useState(false);
   const [buttonsMsg, setButtonsMsg] = useState<string>("");
   const [lastButton, setLastButton] = useState<string>("");
+  const [lastGuideButton, setLastGuideButton] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -106,6 +108,9 @@ function Content() {
     const buttonListener = addEventListener<[kind: string]>("volume_button", (kind) => {
       setLastButton(kind);
     });
+    const guideListener = addEventListener<[kind: string]>("guide_button", (kind) => {
+      setLastGuideButton(kind);
+    });
 
     const poll = setInterval(() => {
       getConnectionStatus().then(setStatus);
@@ -115,6 +120,7 @@ function Content() {
       removeEventListener("volume_changed", volumeListener);
       removeEventListener("stats_update", statsListener);
       removeEventListener("volume_button", buttonListener);
+      removeEventListener("guide_button", guideListener);
       clearInterval(poll);
     };
   }, []);
@@ -280,7 +286,15 @@ function Content() {
                 </Field>
               </PanelSectionRow>
             )}
+            <PanelSectionRow>
+              <Field label="Docked">{stats.docked ? "Yes" : "No"}</Field>
+            </PanelSectionRow>
           </>
+        )}
+        {lastGuideButton && (
+          <PanelSectionRow>
+            <Field label="Last Guide press">{lastGuideButton}</Field>
+          </PanelSectionRow>
         )}
       </PanelSection>
 

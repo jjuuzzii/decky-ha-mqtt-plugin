@@ -12,10 +12,16 @@ HTPCs) that connects your device to MQTT and Home Assistant:
   the +/- buttons (SteamOS "ExternalVolume" mechanism). Every press — up, down, mute — is
   published as an MQTT event, even at 100% volume or while muted. Perfect for controlling
   an AV receiver or amplifier through Home Assistant.
+- **Guide/Steam button events**: every press of the controller's Steam button is published
+  as an MQTT event, without blocking Steam's own handling of the button (reads the raw
+  HID report non-exclusively). Useful for triggering scenes/automations.
+- **Docked sensor**: a binary sensor reflects whether an external display (dock/TV/monitor,
+  not the internal panel) is currently connected.
 - **Home Assistant MQTT discovery**: all sensors, a Power (on/off) binary sensor and
   Suspend / Shutdown / Restart / Wake buttons appear automatically on one device.
 - **Remote power control**: suspend, shutdown and reboot via MQTT; wake via Wake-on-LAN
-  (sent by a small Home Assistant automation, see below).
+  (sent by a small Home Assistant automation, see below). The plugin also auto-recovers
+  the audio pipeline and MQTT connection after suspend/resume.
 
 > Built with the help of AI (Claude Code). Not affiliated with Valve.
 
@@ -64,7 +70,10 @@ With the default base topic `decky/steamdeck` (configurable):
 | `<base>/volume/level`            | `0`–`100`                        | Retained, instant on change             |
 | `<base>/volume/muted`            | `ON` / `OFF`                     | Retained                                |
 | `<base>/volume/button`           | `{"event_type": "volume_up"}`    | Event per +/- press (also `volume_down`, `mute_toggle`) |
+| `<base>/guide_button`            | `{"event_type": "press"}`        | Event per controller Steam/guide button press |
 | `<base>/power/set` (subscribe)   | `suspend` / `shutdown` / `reboot`| Executes the action; `wake` is ignored by the plugin (handled by HA, see below) |
+
+`stats` also includes `"docked": true/false`.
 
 ## Power buttons & Wake-on-LAN
 
@@ -141,6 +150,14 @@ nmcli connection modify "Wired connection 1" 802-3-ethernet.wake-on-lan magic
 - **Power sensor slow to turn off on suspend** — the broker flags the device offline
   after the MQTT keepalive (~15 s). Suspending via the HA button is instant, because the
   plugin unpublishes availability first.
+- **Guide button not detected** — `guide_button.py` currently matches the raw HID report
+  signature (report id `0x44`, third byte `0x02`) empirically captured from a "Valve
+  Software Steam Controller Puck" device (`HID_ID 0003:000028DE:00001304`, seen on a
+  Steam Machine). Other hardware (e.g. handheld Steam Deck, which uses a different
+  `hid-steam` driver and `HID_ID 0003:000028DE:00001205`) may use a different report
+  layout — this hasn't been verified there yet. If it doesn't fire on your device, capture
+  raw reports from the matching `/dev/hidraw*` nodes while pressing the button and adjust
+  `STEAM_BUTTON_REPORT_ID`/`STEAM_BUTTON_CODE_BYTE`/`STEAM_BUTTON_CODE` accordingly.
 
 ## License
 

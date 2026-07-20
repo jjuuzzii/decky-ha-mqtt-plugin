@@ -10,6 +10,7 @@ import plugin_settings
 import system_stats
 from audio_volume import AudioVolumeMonitor
 from external_volume import ExternalVolumeServer
+from guide_button import GuideButtonMonitor
 from mqtt_client import MqttManager
 from proc_env import user_env
 
@@ -30,11 +31,13 @@ class Plugin:
         self.mqtt.has_battery = system_stats.has_battery()
         self.volume_monitor = AudioVolumeMonitor(self.loop, self._handle_volume_change)
         self.ext_volume = ExternalVolumeServer(self._handle_volume_button)
+        self.guide_button = GuideButtonMonitor(self.loop, self._handle_guide_button)
 
         if self.settings.get("mqtt_host"):
             self.mqtt.connect(self.settings)
 
         self.volume_monitor.start()
+        self.guide_button.start()
 
         if self.settings.get("volume_buttons_enabled"):
             try:
@@ -57,6 +60,8 @@ class Plugin:
             self._resume_task.cancel()
         if hasattr(self, "volume_monitor"):
             self.volume_monitor.stop()
+        if hasattr(self, "guide_button"):
+            self.guide_button.stop()
         if hasattr(self, "ext_volume"):
             await self.ext_volume.stop()
         if hasattr(self, "mqtt"):
@@ -120,6 +125,11 @@ class Plugin:
     async def _handle_volume_button(self, kind: str):
         self.mqtt.publish_volume_button(kind)
         await decky.emit("volume_button", kind)
+
+    async def _handle_guide_button(self, kind: str):
+        decky.logger.info(f"Guide button: {kind}")
+        self.mqtt.publish_guide_button(kind)
+        await decky.emit("guide_button", kind)
 
     async def _handle_power_command(self, action: str):
         cmd = _POWER_COMMANDS.get(action)
