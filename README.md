@@ -124,6 +124,23 @@ Enable WoL on the device (persists via NetworkManager):
 nmcli connection modify "Wired connection 1" 802-3-ethernet.wake-on-lan magic
 ```
 
+### Full TV sync as a blueprint
+
+For a complete Steam Machine ↔ TV coupling (power follows power, HDMI source
+switching, volume buttons control the TV, guide button switches input, plus
+the wake automation above) import
+[`blueprints/automation/steamos_tv_sync.yaml`](blueprints/automation/steamos_tv_sync.yaml)
+in Home Assistant (Settings → Automations & Scenes → Blueprints → Import
+Blueprint → paste the raw GitHub URL) instead of writing the automation by
+hand. Creating an automation from it only asks you to pick your entities
+(power sensor, suspend button, wake button, TV, MAC address, optionally the
+volume/guide button event entities) — nothing else needs to be created;
+debouncing of the volume buttons happens inside the plugin itself. Two
+collapsed "advanced" sections let you tweak the wait time before each state
+change is acted on (default 5 s each) and toggle each on/off coupling
+independently — both default to the original behavior, so you only need to
+open them if you want something different.
+
 ## Troubleshooting
 
 - **Plugin doesn't appear after manual install** — check

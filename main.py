@@ -20,6 +20,13 @@ _POWER_COMMANDS = {
     "reboot": ["systemctl", "reboot"],
 }
 
+# Minimum gap between two identical volume-button events (up/down/mute each
+# tracked separately) before we forward another one. Steam's varlink calls
+# can otherwise fire faster than downstream consumers (e.g. a TV over HDMI-CEC
+# or a Home Assistant automation) can act on, so debounce at the source
+# instead of leaving it to every consumer.
+_VOLUME_BUTTON_DEBOUNCE_SECONDS = 0.4
+
 
 class Plugin:
     # -- lifecycle ----------------------------------------------------------
@@ -31,6 +38,7 @@ class Plugin:
         self.mqtt.has_battery = system_stats.has_battery()
         self.volume_monitor = AudioVolumeMonitor(self.loop, self._handle_volume_change)
         self.ext_volume = ExternalVolumeServer(self._handle_volume_button)
+        self._volume_button_last = {}
         self.guide_button = GuideButtonMonitor(self.loop, self._handle_guide_button)
 
         if self.settings.get("mqtt_host"):
@@ -123,6 +131,11 @@ class Plugin:
         await decky.emit("volume_changed", level, muted)
 
     async def _handle_volume_button(self, kind: str):
+        now = time.monotonic()
+        last = self._volume_button_last.get(kind, 0.0)
+        if now - last < _VOLUME_BUTTON_DEBOUNCE_SECONDS:
+            return
+        self._volume_button_last[kind] = now
         self.mqtt.publish_volume_button(kind)
         await decky.emit("volume_button", kind)
 

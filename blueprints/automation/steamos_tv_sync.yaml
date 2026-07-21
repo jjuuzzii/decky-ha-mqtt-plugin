@@ -1,0 +1,336 @@
+blueprint:
+  name: Steam Machine & TV Full Sync (Decky MQTT Status)
+  description: >-
+    Keeps a SteamOS device (exposed via the "Decky MQTT Status" plugin) and a
+    TV/media player in sync:
+
+    - Turning the Steam device on turns the TV on and switches it to the
+    right HDMI input.
+
+    - Switching the TV to that HDMI input wakes the Steam device via
+    Wake-on-LAN.
+
+    - Turning the Steam device off turns the TV off.
+
+    - Turning the TV off suspends the Steam device.
+
+    - The Steam controller's volume buttons control the TV's volume, and the
+    guide/Steam button switches the TV to the HDMI input.
+
+    Just pick your entities below — nothing else needs to be created
+
+    (debouncing of the volume buttons already happens inside the plugin
+    itself). Two collapsed sections let you fine-tune things further:
+    "Delays" (how long a state must hold before reacting, default 5 s each)
+    and "Sync options" (turn any of the four on/off couplings above off
+    individually) — both default to the behavior described above.
+
+    Requirements: `wake_on_lan:` in configuration.yaml, and Wake-on-LAN
+    enabled on the device.
+  domain: automation
+  homeassistant:
+    min_version: 2024.6.0
+  source_url: https://github.com/jjuuzzii/decky-ha-mqtt-plugin/blob/main/blueprints/automation/steamos_tv_sync.yaml
+  input:
+    steam_power_sensor:
+      name: Steam device power sensor
+      description: The Decky plugin's power sensor (binary_sensor.<device>_power).
+      selector:
+        entity:
+          domain: binary_sensor
+    steam_suspend_button:
+      name: Steam device suspend button
+      description: The Decky plugin's suspend button (button.<device>_suspend).
+      selector:
+        entity:
+          domain: button
+    steam_wake_button:
+      name: Steam device wake button
+      description: The Decky plugin's wake button (button.<device>_wake).
+      selector:
+        entity:
+          domain: button
+    steam_mac:
+      name: Steam device MAC address
+      description: Used to send the Wake-on-LAN magic packet.
+      selector:
+        text:
+    tv_player:
+      name: TV / media player
+      selector:
+        entity:
+          domain: media_player
+    tv_source:
+      name: HDMI source
+      description: >-
+        The source name to switch the TV to when the Steam device turns on
+        or the guide button is pressed.
+      default: HDMI 1
+      selector:
+        text:
+    volume_buttons_entity:
+      name: Volume buttons event entity (optional)
+      description: >-
+        event.<device>_volume_buttons. Leave empty if volume buttons aren't
+        enabled in the Decky plugin.
+      default: ""
+      selector:
+        entity:
+          domain: event
+    guide_button_entity:
+      name: Guide/Steam button event entity (optional)
+      description: event.<device>_guide_button. Leave empty to disable this action.
+      default: ""
+      selector:
+        entity:
+          domain: event
+
+    delays:
+      name: Delays
+      icon: mdi:timer-outline
+      description: How long a state must hold steady before it's acted on.
+      collapsed: true
+      input:
+        wait_steam_on:
+          name: Steam device turned on
+          description: Before the TV is turned on.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 300
+              step: 1
+              unit_of_measurement: s
+              mode: box
+        wait_tv_hdmi:
+          name: TV switched to the HDMI source
+          description: Before Wake-on-LAN is sent (only while the Steam device is off).
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 300
+              step: 1
+              unit_of_measurement: s
+              mode: box
+        wait_steam_off:
+          name: Steam device turned off
+          description: Before the TV is turned off.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 300
+              step: 1
+              unit_of_measurement: s
+              mode: box
+        wait_tv_off:
+          name: TV turned off
+          description: Before the Steam device is suspended.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 300
+              step: 1
+              unit_of_measurement: s
+              mode: box
+
+    options:
+      name: Sync options
+      icon: mdi:toggle-switch-outline
+      description: Which on/off couplings should be active.
+      collapsed: true
+      input:
+        opt_steam_on_tv_on:
+          name: Steam device starts → turn TV on
+          default: true
+          selector:
+            boolean: {}
+        opt_tv_hdmi_wake:
+          name: TV switched to HDMI source → wake Steam device
+          default: true
+          selector:
+            boolean: {}
+        opt_steam_off_tv_off:
+          name: Steam device shuts down → turn TV off
+          default: true
+          selector:
+            boolean: {}
+        opt_tv_off_steam_suspend:
+          name: TV turned off → suspend Steam device
+          default: true
+          selector:
+            boolean: {}
+
+variables:
+  tv_source: !input tv_source
+  opt_steam_on_tv_on: !input opt_steam_on_tv_on
+  opt_tv_hdmi_wake: !input opt_tv_hdmi_wake
+  opt_steam_off_tv_off: !input opt_steam_off_tv_off
+  opt_tv_off_steam_suspend: !input opt_tv_off_steam_suspend
+
+triggers:
+  - trigger: state
+    entity_id: !input steam_power_sensor
+    from: "off"
+    to: "on"
+    for:
+      seconds: !input wait_steam_on
+    id: steam_started
+  - trigger: state
+    entity_id: !input tv_player
+    attribute: source
+    to: !input tv_source
+    for:
+      seconds: !input wait_tv_hdmi
+    id: tv_on_hdmi_source
+  - trigger: state
+    entity_id: !input steam_power_sensor
+    from: "on"
+    to: "off"
+    for:
+      seconds: !input wait_steam_off
+    id: steam_shutdown
+  - trigger: state
+    entity_id: !input tv_player
+    from: "on"
+    to: "off"
+    for:
+      seconds: !input wait_tv_off
+    id: tv_off
+  - trigger: event.received
+    target:
+      entity_id: !input volume_buttons_entity
+    options:
+      event_type:
+        - volume_up
+    id: volume_up
+  - trigger: event.received
+    target:
+      entity_id: !input volume_buttons_entity
+    options:
+      event_type:
+        - volume_down
+    id: volume_down
+  - trigger: event.received
+    target:
+      entity_id: !input volume_buttons_entity
+    options:
+      event_type:
+        - mute_toggle
+    id: mute
+  - trigger: event.received
+    target:
+      entity_id: !input guide_button_entity
+    options:
+      event_type:
+        - press
+    id: guide_button
+  - trigger: state
+    entity_id: !input steam_wake_button
+    not_from:
+      - unknown
+    id: wake_button
+
+conditions: []
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: steam_started
+          - condition: template
+            value_template: "{{ opt_steam_on_tv_on }}"
+        sequence:
+          - action: media_player.turn_on
+            target:
+              entity_id: !input tv_player
+          - delay: "00:00:06"
+          - action: media_player.select_source
+            target:
+              entity_id: !input tv_player
+            data:
+              source: !input tv_source
+      - conditions:
+          - condition: trigger
+            id: tv_on_hdmi_source
+          - condition: template
+            value_template: "{{ opt_tv_hdmi_wake }}"
+          - condition: state
+            entity_id: !input steam_power_sensor
+            state: "off"
+        sequence:
+          - action: wake_on_lan.send_magic_packet
+            data:
+              mac: !input steam_mac
+      - conditions:
+          - condition: trigger
+            id: steam_shutdown
+          - condition: template
+            value_template: "{{ opt_steam_off_tv_off }}"
+          - condition: state
+            entity_id: !input tv_player
+            state: "on"
+          - condition: state
+            entity_id: !input tv_player
+            attribute: source
+            state: !input tv_source
+        sequence:
+          - action: media_player.turn_off
+            target:
+              entity_id: !input tv_player
+      - conditions:
+          - condition: trigger
+            id: tv_off
+          - condition: template
+            value_template: "{{ opt_tv_off_steam_suspend }}"
+          - condition: state
+            entity_id: !input steam_power_sensor
+            state: "on"
+        sequence:
+          - action: button.press
+            target:
+              entity_id: !input steam_suspend_button
+      - conditions:
+          - condition: trigger
+            id: volume_up
+        sequence:
+          - action: media_player.volume_up
+            target:
+              entity_id: !input tv_player
+      - conditions:
+          - condition: trigger
+            id: volume_down
+        sequence:
+          - action: media_player.volume_down
+            target:
+              entity_id: !input tv_player
+      - conditions:
+          - condition: trigger
+            id: mute
+        sequence:
+          - action: media_player.volume_set
+            target:
+              entity_id: !input tv_player
+            data:
+              volume_level: 0
+      - conditions:
+          - condition: trigger
+            id: guide_button
+        sequence:
+          - action: media_player.select_source
+            target:
+              entity_id: !input tv_player
+            data:
+              source: !input tv_source
+      - conditions:
+          - condition: trigger
+            id: wake_button
+        sequence:
+          - action: wake_on_lan.send_magic_packet
+            data:
+              mac: !input steam_mac
+
+mode: parallel
+max: 10
