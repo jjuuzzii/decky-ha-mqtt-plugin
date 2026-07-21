@@ -39,13 +39,30 @@ between devices, all over MQTT.
 
 ## Installation
 
+**Quick install (SSH)** — installs/updates the plugin from the latest release, sets up the
+polkit rule for suspend/shutdown/reboot, and enables Wake-on-LAN, all in one step. Run this
+on the Steam Machine / Steam Deck itself:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jjuuzzii/decky-ha-mqtt-plugin/main/scripts/install.sh | sudo bash
+```
+
+(inspect [`scripts/install.sh`](scripts/install.sh) first if you'd rather not pipe a
+script into `sudo bash` blindly — it's idempotent, so re-running it to update later is safe.)
+
+**Manual install** (Game Mode, no SSH needed):
+
 1. Download `decky-mqtt-status.zip` from the
    [latest release](https://github.com/jjuuzzii/decky-ha-mqtt-plugin/releases/latest)
    (or build it yourself, see [Building from source](#building-from-source)).
 2. In Game Mode: Decky → gear icon → enable **Developer mode** → **Developer** tab →
    **Install Plugin from ZIP** → select the zip.
-3. Open the plugin in the Quick Access menu, enter your broker host/port/credentials and
-   press **Save & Connect**.
+3. For suspend/shutdown/reboot and Wake-on-LAN, follow
+   [Power buttons & Wake-on-LAN](#power-buttons--wake-on-lan) below — or just run the
+   script above once instead (it's idempotent, so it won't break your existing install).
+
+Either way, finish by opening the plugin in the Quick Access menu, entering your broker
+host/port/credentials and pressing **Save & Connect**.
 
 ## Full TV/AVR sync (quasi HDMI-CEC)
 
@@ -82,6 +99,9 @@ Both default to the behavior described above, so you only need to open them if y
 something different. This needs Wake-on-LAN set up — see the next section.
 
 ## Power buttons & Wake-on-LAN
+
+The [quick-install script](#installation) sets both of these up automatically. This section
+is for a manual install, or if you only want to redo one part.
 
 **Suspend/shutdown/reboot** need a one-time polkit rule, because the plugin backend runs
 outside a user session. Create `/etc/polkit-1/rules.d/49-decky-mqtt-power.rules` (as root):
