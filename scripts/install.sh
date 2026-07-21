@@ -55,7 +55,7 @@ if [ -n "$CONN" ]; then
     nmcli connection modify "$CONN" 802-3-ethernet.wake-on-lan magic
     echo "    Wake-on-LAN enabled on '${CONN}'."
 else
-    echo "    No active wired connection found — connect via Ethernet once, then run:" >&2
+    echo "    No active wired connection found - connect via Ethernet once, then run:" >&2
     echo "      nmcli connection modify <connection-name> 802-3-ethernet.wake-on-lan magic" >&2
 fi
 
