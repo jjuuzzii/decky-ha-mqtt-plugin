@@ -130,9 +130,13 @@ For a complete Steam Machine ↔ TV coupling (power follows power, HDMI source
 switching, volume buttons control the TV, guide button switches input, plus
 the wake automation above) import
 [`blueprints/automation/steamos_tv_sync.yaml`](blueprints/automation/steamos_tv_sync.yaml)
-in Home Assistant (Settings → Automations & Scenes → Blueprints → Import
-Blueprint → paste the raw GitHub URL) instead of writing the automation by
-hand. Creating an automation from it only asks you to pick your entities
+instead of writing the automation by hand:
+
+[![Open your Home Assistant instance and show the blueprint import dialog with this blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fjjuuzzii%2Fdecky-ha-mqtt-plugin%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsteamos_tv_sync.yaml)
+
+(or manually: Settings → Automations & Scenes → Blueprints → Import Blueprint
+→ paste the raw GitHub URL). Creating an automation from it only asks you to
+pick your entities
 (power sensor, suspend button, wake button, TV, MAC address, optionally the
 volume/guide button event entities) — nothing else needs to be created;
 debouncing of the volume buttons happens inside the plugin itself. Two
