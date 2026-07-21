@@ -1,6 +1,6 @@
 {
   "name": "decky-mqtt-status",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Decky plugin: publishes SteamOS system status, real-time volume, guide-button presses and dock state to MQTT/Home Assistant, with relative volume buttons and remote power control.",
   "type": "module",
   "scripts": {
