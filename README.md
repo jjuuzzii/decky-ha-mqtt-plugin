@@ -1,8 +1,15 @@
 # MQTT Status (Decky Plugin)
 
 A [Decky Loader](https://decky.xyz/) plugin for SteamOS (Steam Deck / Steam Machine / DIY
-HTPCs) that connects your device to MQTT and Home Assistant:
+HTPCs) that turns your Steam device + Home Assistant into a **quasi HDMI-CEC setup** — no
+CEC adapter, no dependence on your TV's own (often flaky) CEC support: the Steam
+controller's volume buttons and guide button control your TV/AVR, and power state follows
+between devices, all over MQTT.
 
+- **Full TV/AVR sync, no CEC hardware needed**: a
+  [ready-to-import Home Assistant blueprint](#full-tvavr-sync-quasi-hdmi-cec) ties it all
+  together — power follows power, HDMI source switching, Wake-on-LAN, volume buttons,
+  guide button — you just pick your entities.
 - **System stats over MQTT**: CPU load, RAM, disk usage, CPU/GPU temperature, GPU load,
   network up/down rate, IP address, uptime, battery (only on devices that have one) —
   published every few seconds (configurable).
@@ -10,18 +17,17 @@ HTPCs) that connects your device to MQTT and Home Assistant:
   (via `pactl subscribe` + `wpctl`, no polling delay).
 - **Relative volume buttons (+/-)**: optionally replaces the Game Mode volume slider with
   the +/- buttons (SteamOS "ExternalVolume" mechanism). Every press — up, down, mute — is
-  published as an MQTT event, even at 100% volume or while muted. Perfect for controlling
-  an AV receiver or amplifier through Home Assistant.
+  published as an MQTT event, even at 100% volume or while muted, debounced inside the
+  plugin itself.
 - **Guide/Steam button events**: every press of the controller's Steam button is published
   as an MQTT event, without blocking Steam's own handling of the button (reads the raw
-  HID report non-exclusively). Useful for triggering scenes/automations.
+  HID report non-exclusively).
 - **Docked sensor**: a binary sensor reflects whether an external display (dock/TV/monitor,
   not the internal panel) is currently connected.
 - **Home Assistant MQTT discovery**: all sensors, a Power (on/off) binary sensor and
   Suspend / Shutdown / Restart / Wake buttons appear automatically on one device.
-- **Remote power control**: suspend, shutdown and reboot via MQTT; wake via Wake-on-LAN
-  (sent by a small Home Assistant automation, see below). The plugin also auto-recovers
-  the audio pipeline and MQTT connection after suspend/resume.
+- **Remote power control**: suspend, shutdown and reboot via MQTT; wake via Wake-on-LAN.
+  The plugin also auto-recovers the audio pipeline and MQTT connection after suspend/resume.
 
 > Built with the help of AI (Claude Code). Not affiliated with Valve.
 
@@ -33,47 +39,47 @@ HTPCs) that connects your device to MQTT and Home Assistant:
 
 ## Installation
 
-1. Download `decky-mqtt-status.zip` (or build it yourself, see below).
+1. Download `decky-mqtt-status.zip` from the
+   [latest release](https://github.com/jjuuzzii/decky-ha-mqtt-plugin/releases/latest)
+   (or build it yourself, see [Building from source](#building-from-source)).
 2. In Game Mode: Decky → gear icon → enable **Developer mode** → **Developer** tab →
    **Install Plugin from ZIP** → select the zip.
 3. Open the plugin in the Quick Access menu, enter your broker host/port/credentials and
    press **Save & Connect**.
 
-## Building from source
+## Full TV/AVR sync (quasi HDMI-CEC)
 
-Frontend (any OS with Node.js + pnpm):
+The real payoff of the buttons and power entities above: import
+[`blueprints/automation/steamos_tv_sync.yaml`](blueprints/automation/steamos_tv_sync.yaml)
+into Home Assistant and just pick your entities — no CEC adapter, no automation to write
+by hand:
 
-```bash
-pnpm install
-pnpm run build        # produces dist/index.js
-```
+[![Open your Home Assistant instance and show the blueprint import dialog with this blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fjjuuzzii%2Fdecky-ha-mqtt-plugin%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsteamos_tv_sync.yaml)
 
-Python dependencies must be vendored into `py_modules/` **as Linux packages**:
+*(or manually: Settings → Automations & Scenes → Blueprints → Import Blueprint
+→ paste the raw GitHub URL)*
 
-```bash
-pip install --target=py_modules --platform manylinux2014_x86_64 --python-version 311 \
-    --implementation cp --abi abi3 --only-binary=:all: --no-deps psutil==5.9.8
-pip install --target=py_modules --no-deps paho-mqtt==1.6.1
-```
+**What it does:**
 
-Then zip the folder (`plugin.json`, `package.json`, `main.py`, `dist/`, `py_modules/`)
-**with forward-slash paths** — on Windows use Python's `zipfile`, not `Compress-Archive`.
+- Steam device turns on → TV turns on and switches to the right HDMI input
+- TV switched to that HDMI input while the Steam device is off → wakes it via Wake-on-LAN
+- Steam device turns off → TV turns off
+- TV turns off → Steam device suspends
+- Volume buttons on the Steam controller → control the TV's volume; guide/Steam button →
+  switches the TV to the HDMI input
 
-## MQTT topics
+**Setup:** creating the automation from the blueprint only asks for entities — power
+sensor, suspend button, wake button, TV, MAC address, and optionally the volume/guide
+button event entities. Nothing else needs to be created; volume-button debouncing runs
+inside the plugin itself.
 
-With the default base topic `decky/steamdeck` (configurable):
+**Advanced (optional, collapsed by default):**
 
-| Topic                            | Payload                          | Notes                                   |
-|----------------------------------|----------------------------------|-----------------------------------------|
-| `<base>/availability`            | `online` / `offline`             | Retained; last-will marks offline       |
-| `<base>/stats`                   | JSON                             | All system stats, retained              |
-| `<base>/volume/level`            | `0`–`100`                        | Retained, instant on change             |
-| `<base>/volume/muted`            | `ON` / `OFF`                     | Retained                                |
-| `<base>/volume/button`           | `{"event_type": "volume_up"}`    | Event per +/- press (also `volume_down`, `mute_toggle`) |
-| `<base>/guide_button`            | `{"event_type": "press"}`        | Event per controller Steam/guide button press |
-| `<base>/power/set` (subscribe)   | `suspend` / `shutdown` / `reboot`| Executes the action; `wake` is ignored by the plugin (handled by HA, see below) |
+- *Delays* — how long a state must hold before it's acted on (default 5 s each)
+- *Sync options* — turn any of the five behaviors above on/off independently
 
-`stats` also includes `"docked": true/false`.
+Both default to the behavior described above, so you only need to open them if you want
+something different. This needs Wake-on-LAN set up — see the next section.
 
 ## Power buttons & Wake-on-LAN
 
@@ -96,8 +102,10 @@ polkit.addRule(function(action, subject) {
 
 Then `sudo systemctl restart polkit`.
 
-**Wake** cannot be done by a sleeping machine, so the Wake button publishes `wake` to
-`<base>/power/set` and a Home Assistant automation sends the magic packet:
+**Wake** cannot be done by a sleeping machine, so the Wake button just publishes `wake` to
+`<base>/power/set`; something on the Home Assistant side has to turn that into a
+Wake-on-LAN packet. The [blueprint above](#full-tvavr-sync-quasi-hdmi-cec) already wires
+this up. If you don't want the full TV sync, wire up just the wake part yourself:
 
 ```yaml
 # configuration.yaml
@@ -105,12 +113,13 @@ wake_on_lan:
 ```
 
 ```yaml
-# automation (adjust base topic and MAC address!)
+# automation — triggers on the Wake button entity itself, no topic to type/match
 alias: SteamOS Wake Button
 triggers:
-  - trigger: mqtt
-    topic: decky/steamdeck/power/set
-    payload: wake
+  - trigger: state
+    entity_id: button.steamos_device_wake
+    not_from:
+      - unknown
 actions:
   - action: wake_on_lan.send_magic_packet
     data:
@@ -124,37 +133,41 @@ Enable WoL on the device (persists via NetworkManager):
 nmcli connection modify "Wired connection 1" 802-3-ethernet.wake-on-lan magic
 ```
 
-### Full TV sync as a blueprint
+## MQTT topics
 
-Instead of hand-writing the automation above, import
-[`blueprints/automation/steamos_tv_sync.yaml`](blueprints/automation/steamos_tv_sync.yaml)
-and just pick your entities — everything else is wired up for you:
+With the default base topic `decky/steamdeck` (configurable):
 
-[![Open your Home Assistant instance and show the blueprint import dialog with this blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fjjuuzzii%2Fdecky-ha-mqtt-plugin%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsteamos_tv_sync.yaml)
+| Topic                            | Payload                          | Notes                                   |
+|----------------------------------|----------------------------------|-----------------------------------------|
+| `<base>/availability`            | `online` / `offline`             | Retained; last-will marks offline       |
+| `<base>/stats`                   | JSON                             | All system stats, retained              |
+| `<base>/volume/level`            | `0`–`100`                        | Retained, instant on change             |
+| `<base>/volume/muted`            | `ON` / `OFF`                     | Retained                                |
+| `<base>/volume/button`           | `{"event_type": "volume_up"}`    | Event per +/- press (also `volume_down`, `mute_toggle`), debounced in the plugin |
+| `<base>/guide_button`            | `{"event_type": "press"}`        | Event per controller Steam/guide button press |
+| `<base>/power/set` (subscribe)   | `suspend` / `shutdown` / `reboot`| Executes the action; `wake` is ignored by the plugin (handled by HA, see above) |
 
-*(or manually: Settings → Automations & Scenes → Blueprints → Import Blueprint
-→ paste the raw GitHub URL)*
+`stats` also includes `"docked": true/false`.
 
-**What it does:**
+## Building from source
 
-- Steam Machine turns on → TV turns on and switches to the right HDMI input
-- TV switched to that HDMI input while the Steam Machine is off → wakes it via Wake-on-LAN
-- Steam Machine turns off → TV turns off
-- TV turns off → Steam Machine suspends
-- Volume buttons on the Steam controller → control the TV's volume; guide/Steam button → switches the TV to the HDMI input
+Frontend (any OS with Node.js + pnpm):
 
-**Setup:** creating the automation from the blueprint only asks for entities —
-power sensor, suspend button, wake button, TV, MAC address, and optionally the
-volume/guide button event entities. Nothing else needs to be created;
-volume-button debouncing runs inside the plugin itself.
+```bash
+pnpm install
+pnpm run build        # produces dist/index.js
+```
 
-**Advanced (optional, collapsed by default):**
+Python dependencies must be vendored into `py_modules/` **as Linux packages**:
 
-- *Delays* — how long a state must hold before it's acted on (default 5 s each)
-- *Sync options* — turn any of the five behaviors above on/off independently
+```bash
+pip install --target=py_modules --platform manylinux2014_x86_64 --python-version 311 \
+    --implementation cp --abi abi3 --only-binary=:all: --no-deps psutil==5.9.8
+pip install --target=py_modules --no-deps paho-mqtt==1.6.1
+```
 
-Both default to the behavior described above, so you only need to open them
-if you want something different.
+Then zip the folder (`plugin.json`, `package.json`, `main.py`, `dist/`, `py_modules/`)
+**with forward-slash paths** — on Windows use Python's `zipfile`, not `Compress-Archive`.
 
 ## Troubleshooting
 
@@ -177,8 +190,11 @@ if you want something different.
   currently routed through HDMI/DisplayPort.
 - **"Volume Buttons" event entity shows "unknown" in HA** — normal until the first
   button press arrives.
-- **Wake button does nothing** — the HA automation's MQTT topic must match your
-  configured base topic exactly (check the automation trace in HA).
+- **Wake button does nothing** — check the automation's trace in Home Assistant. If
+  you're using the blueprint, confirm the Wake-button entity you selected is the right
+  device. If you wired it up by hand instead, make sure the trigger is on the Wake
+  button's entity state, not a hand-typed MQTT topic that can drift from your configured
+  base topic.
 - **Power sensor slow to turn off on suspend** — the broker flags the device offline
   after the MQTT keepalive (~15 s). Suspending via the HA button is instant, because the
   plugin unpublishes availability first.
