@@ -8,6 +8,7 @@ import audio_volume
 import external_volume
 import plugin_settings
 import system_stats
+import update_check
 from audio_volume import AudioVolumeMonitor
 from external_volume import ExternalVolumeServer
 from guide_button import GuideButtonMonitor
@@ -57,8 +58,12 @@ class Plugin:
             except Exception:
                 decky.logger.exception("Failed to start ExternalVolume server on boot")
 
+        self._running_app = {"appid": None, "name": ""}
+        self._update_cache = None
+
         self._stats_task = self.loop.create_task(self._stats_loop())
         self._resume_task = self.loop.create_task(self._resume_watch())
+        self._update_task = self.loop.create_task(self._update_loop())
         decky.logger.info("MQTT Status plugin started")
 
     async def _unload(self):
@@ -66,6 +71,8 @@ class Plugin:
             self._stats_task.cancel()
         if hasattr(self, "_resume_task"):
             self._resume_task.cancel()
+        if hasattr(self, "_update_task"):
+            self._update_task.cancel()
         if hasattr(self, "volume_monitor"):
             self.volume_monitor.stop()
         if hasattr(self, "guide_button"):
@@ -113,6 +120,17 @@ class Plugin:
                 except Exception:
                     decky.logger.exception("Resume refresh failed")
             last_wall = time.time()
+
+    async def _update_loop(self):
+        # First check shortly after boot (give the network a moment), then
+        # re-check twice a day so the HA update entity stays current.
+        await asyncio.sleep(30)
+        while True:
+            try:
+                await self.check_update()
+            except Exception:
+                decky.logger.exception("Update check failed")
+            await asyncio.sleep(12 * 3600)
 
     async def _on_resume(self):
         # Give the network and audio stack a moment to settle.
@@ -188,6 +206,31 @@ class Plugin:
 
     async def get_current_stats(self) -> dict:
         return system_stats.collect()
+
+    async def set_running_app(self, appid=None, name=None):
+        """Called by the frontend on app start/stop (SteamClient lifetime events)."""
+        self._running_app = {"appid": appid, "name": name or ""}
+        self.mqtt.publish_app(appid, name or "")
+
+    async def check_update(self) -> dict:
+        now = time.monotonic()
+        if self._update_cache and now - self._update_cache[0] < 3600:
+            return self._update_cache[1]
+        current = update_check.current_version()
+        latest = await self.loop.run_in_executor(None, update_check.fetch_latest)
+        info = {
+            "current": current,
+            "latest": latest["version"] if latest else None,
+            "update_available": bool(
+                latest and update_check.is_newer(latest["version"], current)
+            ),
+            "url": latest["url"] if latest else None,
+        }
+        if latest:
+            # Only cache successful checks so a flaky network retries sooner.
+            self._update_cache = (now, info)
+            self.mqtt.publish_update(current, latest["version"], latest["url"])
+        return info
 
     # -- relative volume buttons (+/-), callable from the frontend -----------
     async def volume_buttons_get_state(self) -> dict:

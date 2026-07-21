@@ -93,6 +93,8 @@ const getCurrentStats = callable("get_current_stats");
 const volumeButtonsGetState = callable("volume_buttons_get_state");
 const volumeButtonsSet = callable("volume_buttons_set");
 const wireplumberRestart = callable("wireplumber_restart");
+const reportRunningApp = callable("set_running_app");
+const checkUpdate = callable("check_update");
 function Content() {
     const [settings, setSettings] = SP_REACT.useState(null);
     const [status, setStatus] = SP_REACT.useState({ connected: false, error: null });
@@ -104,6 +106,8 @@ function Content() {
     const [lastButton, setLastButton] = SP_REACT.useState("");
     const [lastGuideButton, setLastGuideButton] = SP_REACT.useState("");
     const [saving, setSaving] = SP_REACT.useState(false);
+    const [runningAppName, setRunningAppName] = SP_REACT.useState("");
+    const [update, setUpdate] = SP_REACT.useState(null);
     SP_REACT.useEffect(() => {
         getSettings().then(setSettings);
         getConnectionStatus().then(setStatus);
@@ -128,8 +132,11 @@ function Content() {
         const guideListener = addEventListener("guide_button", (kind) => {
             setLastGuideButton(kind);
         });
+        setRunningAppName(DFL.Router.MainRunningApp?.display_name ?? "");
+        checkUpdate().then(setUpdate).catch(() => { });
         const poll = setInterval(() => {
             getConnectionStatus().then(setStatus);
+            setRunningAppName(DFL.Router.MainRunningApp?.display_name ?? "");
         }, 10000);
         return () => {
             removeEventListener("volume_changed", volumeListener);
@@ -178,15 +185,67 @@ function Content() {
     if (!settings) {
         return (SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: "Loading settings\u2026" }) }));
     }
-    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "Connection", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Status", children: status.connected ? "Connected" : status.error ? `Error: ${status.error}` : "Disconnected" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Broker host", description: "IP or hostname of your MQTT broker (e.g. your Home Assistant server)", value: settings.mqtt_host, onChange: (e) => updateSetting("mqtt_host", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Port", value: String(settings.mqtt_port), onChange: (e) => updateSetting("mqtt_port", Number(e.target.value) || 1883) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Username", value: settings.mqtt_username, onChange: (e) => updateSetting("mqtt_username", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Password", description: "Stored in plain text in the plugin settings on this device", value: settings.mqtt_password, onChange: (e) => updateSetting("mqtt_password", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Use TLS", checked: settings.mqtt_use_tls, onChange: (value) => updateSetting("mqtt_use_tls", value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: handleSave, disabled: saving, children: saving ? "Saving…" : "Save & Connect" }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Publishing", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Base topic", description: "All topics start with this prefix \u2014 remember it for automations", value: settings.mqtt_base_topic, onChange: (e) => updateSetting("mqtt_base_topic", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Device name (Home Assistant)", value: settings.device_name, onChange: (e) => updateSetting("device_name", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.SliderField, { label: "Interval (seconds)", value: settings.publish_interval, min: 5, max: 120, step: 5, showValue: true, onChange: (value) => updateSetting("publish_interval", value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Home Assistant discovery", description: "Automatically creates sensors and buttons in Home Assistant", checked: settings.ha_discovery, onChange: (value) => updateSetting("ha_discovery", value) }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Live Status", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Volume", children: volume === null ? "n/a" : `${volume}%${muted ? " (muted)" : ""}` }) }), stats && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "CPU", children: `${stats.cpu_percent}%` }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "RAM", children: `${stats.mem_percent}%` }) }), stats.gpu_busy_percent !== null && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "GPU", children: `${stats.gpu_busy_percent}%` }) })), stats.battery_percent !== null && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Battery", children: `${stats.battery_percent}%${stats.battery_charging ? " (charging)" : ""}` }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Docked", children: stats.docked ? "Yes" : "No" }) })] })), lastGuideButton && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Last Guide press", children: lastGuideButton }) }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Volume Buttons (+/-)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "+/- buttons & MQTT events", description: "Replaces the Game Mode volume slider with +/- buttons and publishes every press via MQTT (even at max volume or while muted)", checked: buttonsEnabled, onChange: handleButtonsToggle }) }), buttonsEnabled && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Last press", children: lastButton || "—" }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: handleWireplumberRestart, children: "Restart audio service" }) }), buttonsMsg && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Status", children: buttonsMsg }) }))] })] }));
+    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "Connection", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Status", children: status.connected ? "Connected" : status.error ? `Error: ${status.error}` : "Disconnected" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Broker host", description: "IP or hostname of your MQTT broker (e.g. your Home Assistant server)", value: settings.mqtt_host, onChange: (e) => updateSetting("mqtt_host", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Port", value: String(settings.mqtt_port), onChange: (e) => updateSetting("mqtt_port", Number(e.target.value) || 1883) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Username", value: settings.mqtt_username, onChange: (e) => updateSetting("mqtt_username", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Password", description: "Stored in plain text in the plugin settings on this device", value: settings.mqtt_password, onChange: (e) => updateSetting("mqtt_password", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Use TLS", checked: settings.mqtt_use_tls, onChange: (value) => updateSetting("mqtt_use_tls", value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: handleSave, disabled: saving, children: saving ? "Saving…" : "Save & Connect" }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Publishing", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Base topic", description: "All topics start with this prefix \u2014 remember it for automations", value: settings.mqtt_base_topic, onChange: (e) => updateSetting("mqtt_base_topic", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Device name (Home Assistant)", value: settings.device_name, onChange: (e) => updateSetting("device_name", e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.SliderField, { label: "Interval (seconds)", value: settings.publish_interval, min: 5, max: 120, step: 5, showValue: true, onChange: (value) => updateSetting("publish_interval", value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Home Assistant discovery", description: "Automatically creates sensors and buttons in Home Assistant", checked: settings.ha_discovery, onChange: (value) => updateSetting("ha_discovery", value) }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Live Status", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Volume", children: volume === null ? "n/a" : `${volume}%${muted ? " (muted)" : ""}` }) }), stats && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "CPU", children: `${stats.cpu_percent}%` }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "RAM", children: `${stats.mem_percent}%` }) }), stats.gpu_busy_percent !== null && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "GPU", children: `${stats.gpu_busy_percent}%` }) })), stats.battery_percent !== null && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Battery", children: `${stats.battery_percent}%${stats.battery_charging ? " (charging)" : ""}` }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Docked", children: stats.docked ? "Yes" : "No" }) })] })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Running app", children: runningAppName || "—" }) }), lastGuideButton && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Last Guide press", children: lastGuideButton }) }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Volume Buttons (+/-)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "+/- buttons & MQTT events", description: "Replaces the Game Mode volume slider with +/- buttons and publishes every press via MQTT (even at max volume or while muted)", checked: buttonsEnabled, onChange: handleButtonsToggle }) }), buttonsEnabled && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Last press", children: lastButton || "—" }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: handleWireplumberRestart, children: "Restart audio service" }) }), buttonsMsg && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Status", children: buttonsMsg }) }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Plugin", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Version", children: update
+                                ? update.update_available
+                                    ? `${update.current} → ${update.latest} available`
+                                    : `${update.current} (up to date)`
+                                : "checking…" }) }), update?.update_available && update.url && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => {
+                                DFL.Navigation.NavigateToExternalWeb(update.url);
+                            }, children: "Open release page" }) }))] })] }));
 }
 var index = definePlugin(() => {
+    // Report the app that's already running when the plugin loads (if any).
+    try {
+        const app = DFL.Router.MainRunningApp;
+        reportRunningApp(app ? Number(app.appid) : null, app?.display_name ?? null);
+    }
+    catch {
+        // Steam UI globals not ready yet — the lifetime hook below will catch up.
+    }
+    // Push every app start/stop to the backend, which publishes it over MQTT.
+    let lifetimeHook;
+    try {
+        lifetimeHook = SteamClient?.GameSessions?.RegisterForAppLifetimeNotifications?.((data) => {
+            try {
+                if (data.bRunning) {
+                    const name = appStore?.GetAppOverviewByAppID?.(data.unAppID)?.display_name ??
+                        String(data.unAppID);
+                    reportRunningApp(data.unAppID, name);
+                }
+                else {
+                    reportRunningApp(null, null);
+                }
+            }
+            catch (e) {
+                console.error("mqtt-status: app lifetime handler failed", e);
+            }
+        });
+    }
+    catch (e) {
+        console.error("mqtt-status: failed to register app lifetime hook", e);
+    }
+    // One-time toast per Steam session if a plugin update is available.
+    const updateToastTimer = setTimeout(() => {
+        checkUpdate()
+            .then((u) => {
+            if (u.update_available) {
+                toaster.toast({
+                    title: "MQTT Status",
+                    body: `Update v${u.latest} available — see the plugin panel.`,
+                });
+            }
+        })
+            .catch(() => { });
+    }, 15000);
     return {
         name: "MQTT Status",
         titleView: SP_JSX.jsx("div", { className: DFL.staticClasses.Title, children: "MQTT Status" }),
         content: SP_JSX.jsx(Content, {}),
         icon: SP_JSX.jsx(FaVolumeUp, {}),
-        onDismount() { },
+        onDismount() {
+            clearTimeout(updateToastTimer);
+            lifetimeHook?.unregister?.();
+        },
     };
 });
 

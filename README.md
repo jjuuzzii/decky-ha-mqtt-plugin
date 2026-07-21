@@ -24,6 +24,10 @@ between devices, all over MQTT.
   HID report non-exclusively).
 - **Docked sensor**: a binary sensor reflects whether an external display (dock/TV/monitor,
   not the internal panel) is currently connected.
+- **Current app sensor**: shows which game/app is running right now (including non-Steam
+  shortcuts), for automations like "dim the lights when a game starts".
+- **Update notifications**: the plugin checks GitHub for new releases — you get a toast in
+  Game Mode, an update notice in the plugin panel, and an update entity in Home Assistant.
 - **Home Assistant MQTT discovery**: all sensors, a Power (on/off) binary sensor and
   Suspend / Shutdown / Restart / Wake buttons appear automatically on one device.
 - **Remote power control**: suspend, shutdown and reboot via MQTT; wake via Wake-on-LAN.
@@ -165,6 +169,8 @@ With the default base topic `decky/steamdeck` (configurable):
 | `<base>/volume/muted`            | `ON` / `OFF`                     | Retained                                |
 | `<base>/volume/button`           | `{"event_type": "volume_up"}`    | Event per +/- press (also `volume_down`, `mute_toggle`), debounced in the plugin |
 | `<base>/guide_button`            | `{"event_type": "press"}`        | Event per controller Steam/guide button press |
+| `<base>/app`                     | `{"appid": 123, "name": "…"}`    | Retained; currently running game/app (empty name = idle) |
+| `<base>/update`                  | JSON                             | Retained; installed/latest plugin version for the HA update entity |
 | `<base>/power/set` (subscribe)   | `suspend` / `shutdown` / `reboot`| Executes the action; `wake` is ignored by the plugin (handled by HA, see above) |
 
 `stats` also includes `"docked": true/false`.

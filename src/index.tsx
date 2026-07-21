@@ -1,8 +1,10 @@
 import {
   ButtonItem,
   Field,
+  Navigation,
   PanelSection,
   PanelSectionRow,
+  Router,
   SliderField,
   TextField,
   ToggleField,
@@ -58,6 +60,17 @@ interface ActionResult {
   enabled: boolean;
 }
 
+interface UpdateInfo {
+  current: string;
+  latest: string | null;
+  update_available: boolean;
+  url: string | null;
+}
+
+// Steam UI globals available to Decky plugins at runtime.
+declare const SteamClient: any;
+declare const appStore: any;
+
 const getSettings = callable<[], Settings>("get_settings");
 const saveSettings = callable<[settings: Partial<Settings>], Settings>("save_settings");
 const getConnectionStatus = callable<[], ConnectionStatus>("get_connection_status");
@@ -70,6 +83,10 @@ const volumeButtonsGetState = callable<[], { enabled: boolean; running: boolean 
 );
 const volumeButtonsSet = callable<[enabled: boolean], ActionResult>("volume_buttons_set");
 const wireplumberRestart = callable<[], { ok: boolean; output: string }>("wireplumber_restart");
+const reportRunningApp = callable<[appid: number | null, name: string | null], void>(
+  "set_running_app"
+);
+const checkUpdate = callable<[], UpdateInfo>("check_update");
 
 function Content() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -82,6 +99,8 @@ function Content() {
   const [lastButton, setLastButton] = useState<string>("");
   const [lastGuideButton, setLastGuideButton] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [runningAppName, setRunningAppName] = useState<string>("");
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
     getSettings().then(setSettings);
@@ -112,8 +131,12 @@ function Content() {
       setLastGuideButton(kind);
     });
 
+    setRunningAppName((Router.MainRunningApp as any)?.display_name ?? "");
+    checkUpdate().then(setUpdate).catch(() => {});
+
     const poll = setInterval(() => {
       getConnectionStatus().then(setStatus);
+      setRunningAppName((Router.MainRunningApp as any)?.display_name ?? "");
     }, 10000);
 
     return () => {
@@ -291,6 +314,9 @@ function Content() {
             </PanelSectionRow>
           </>
         )}
+        <PanelSectionRow>
+          <Field label="Running app">{runningAppName || "—"}</Field>
+        </PanelSectionRow>
         {lastGuideButton && (
           <PanelSectionRow>
             <Field label="Last Guide press">{lastGuideButton}</Field>
@@ -323,16 +349,88 @@ function Content() {
           </PanelSectionRow>
         )}
       </PanelSection>
+
+      <PanelSection title="Plugin">
+        <PanelSectionRow>
+          <Field label="Version">
+            {update
+              ? update.update_available
+                ? `${update.current} → ${update.latest} available`
+                : `${update.current} (up to date)`
+              : "checking…"}
+          </Field>
+        </PanelSectionRow>
+        {update?.update_available && update.url && (
+          <PanelSectionRow>
+            <ButtonItem
+              layout="below"
+              onClick={() => {
+                Navigation.NavigateToExternalWeb(update.url!);
+              }}
+            >
+              Open release page
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
+      </PanelSection>
     </>
   );
 }
 
 export default definePlugin(() => {
+  // Report the app that's already running when the plugin loads (if any).
+  try {
+    const app = Router.MainRunningApp as any;
+    reportRunningApp(app ? Number(app.appid) : null, app?.display_name ?? null);
+  } catch {
+    // Steam UI globals not ready yet — the lifetime hook below will catch up.
+  }
+
+  // Push every app start/stop to the backend, which publishes it over MQTT.
+  let lifetimeHook: { unregister?: () => void } | undefined;
+  try {
+    lifetimeHook = SteamClient?.GameSessions?.RegisterForAppLifetimeNotifications?.(
+      (data: { unAppID: number; bRunning: boolean }) => {
+        try {
+          if (data.bRunning) {
+            const name =
+              appStore?.GetAppOverviewByAppID?.(data.unAppID)?.display_name ??
+              String(data.unAppID);
+            reportRunningApp(data.unAppID, name);
+          } else {
+            reportRunningApp(null, null);
+          }
+        } catch (e) {
+          console.error("mqtt-status: app lifetime handler failed", e);
+        }
+      }
+    );
+  } catch (e) {
+    console.error("mqtt-status: failed to register app lifetime hook", e);
+  }
+
+  // One-time toast per Steam session if a plugin update is available.
+  const updateToastTimer = setTimeout(() => {
+    checkUpdate()
+      .then((u) => {
+        if (u.update_available) {
+          toaster.toast({
+            title: "MQTT Status",
+            body: `Update v${u.latest} available — see the plugin panel.`,
+          });
+        }
+      })
+      .catch(() => {});
+  }, 15000);
+
   return {
     name: "MQTT Status",
     titleView: <div className={staticClasses.Title}>MQTT Status</div>,
     content: <Content />,
     icon: <FaVolumeUp />,
-    onDismount() {},
+    onDismount() {
+      clearTimeout(updateToastTimer);
+      lifetimeHook?.unregister?.();
+    },
   };
 });

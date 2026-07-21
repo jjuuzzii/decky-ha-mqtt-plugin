@@ -156,6 +156,25 @@ class MqttManager:
             self.topic("guide_button"), json.dumps({"event_type": kind}), qos=0, retain=False
         )
 
+    def publish_app(self, appid, name: str):
+        # appid None / name "" means nothing is running.
+        if not self._connected:
+            return
+        payload = json.dumps({"appid": appid, "name": name or ""})
+        self._client.publish(self.topic("app"), payload, qos=0, retain=True)
+
+    def publish_update(self, installed: str, latest: str, url: str = None):
+        if not self._connected:
+            return
+        payload = {
+            "installed_version": installed,
+            "latest_version": latest,
+            "title": "MQTT Status (Decky Plugin)",
+        }
+        if url:
+            payload["release_url"] = url
+        self._client.publish(self.topic("update"), json.dumps(payload), qos=0, retain=True)
+
     # -- Home Assistant MQTT discovery --------------------------------------
     def _discovery_topic(self, component: str, object_id: str) -> str:
         prefix = self._settings.get("ha_discovery_prefix", "homeassistant").strip("/")
@@ -360,6 +379,19 @@ class MqttManager:
             "icon": "mdi:dock-window",
             "state_topic": stats_topic,
             "value_template": "{{ 'ON' if value_json.docked else 'OFF' }}",
+        })
+        self._publish_entity("sensor", "current_app", {
+            "name": "Current App",
+            "icon": "mdi:gamepad-variant",
+            "state_topic": self.topic("app"),
+            "value_template": "{{ value_json.name if value_json.name else 'idle' }}",
+            "json_attributes_topic": self.topic("app"),
+        })
+        self._publish_entity("update", "plugin", {
+            "name": "Plugin Update",
+            "state_topic": self.topic("update"),
+            "entity_category": "diagnostic",
+            "icon": "mdi:package-up",
         })
         # Clean up entities from older plugin versions.
         self._clear_entity("switch", "cec_mode")
