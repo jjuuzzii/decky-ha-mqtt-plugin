@@ -94,6 +94,10 @@ by hand:
 - Steam Link / Remote Play streaming starts → TV turns off (only if it's on the right
   HDMI input); streaming stops → TV turns back on
 
+None of the above ever touches the TV while it's on and showing something else (Netflix,
+live TV, another input) — including the guide button and volume controls, which do
+nothing until the TV is back on the right input.
+
 **Setup:** creating the automation from the blueprint only asks for entities — power
 sensor, suspend button, wake button, TV, MAC address, and optionally the volume/guide
 button and Steam Link streaming sensor entities. Nothing else needs to be created;

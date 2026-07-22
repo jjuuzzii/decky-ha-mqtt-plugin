@@ -35,11 +35,32 @@ class Plugin:
         self.loop = asyncio.get_event_loop()
         self.settings = plugin_settings.load()
 
+        self.ext_volume = ExternalVolumeServer(self._handle_volume_button)
+        self._volume_button_last = {}
+
+        # Do this before anything else in startup: Steam only checks once,
+        # at Gamescope session start, whether the HDMI output supports
+        # external volume control. If our varlink socket/config aren't up
+        # yet at that exact moment, Steam falls back to its normal volume
+        # slider and doesn't re-check later — only touching a volume slider
+        # manually seemed to make it re-probe. Always restarting WirePlumber
+        # here (even if the conf didn't change) after our socket already
+        # exists fixes this, confirmed across a real reboot; running it
+        # first gives it the earliest possible start against Steam's own
+        # startup instead of queuing behind MQTT/monitor setup below.
+        if self.settings.get("volume_buttons_enabled"):
+            try:
+                await self.ext_volume.start()
+                ok, changed, msg = external_volume.write_conf()
+                decky.logger.info(f"ExternalVolume conf on boot: {msg}")
+                if ok:
+                    external_volume.restart_wireplumber()
+            except Exception:
+                decky.logger.exception("Failed to start ExternalVolume server on boot")
+
         self.mqtt = MqttManager(self.loop, self._handle_power_command)
         self.mqtt.has_battery = system_stats.has_battery()
         self.volume_monitor = AudioVolumeMonitor(self.loop, self._handle_volume_change)
-        self.ext_volume = ExternalVolumeServer(self._handle_volume_button)
-        self._volume_button_last = {}
         self.guide_button = GuideButtonMonitor(self.loop, self._handle_guide_button)
 
         if self.settings.get("mqtt_host"):
@@ -47,16 +68,6 @@ class Plugin:
 
         self.volume_monitor.start()
         self.guide_button.start()
-
-        if self.settings.get("volume_buttons_enabled"):
-            try:
-                await self.ext_volume.start()
-                ok, changed, msg = external_volume.write_conf()
-                decky.logger.info(f"ExternalVolume conf on boot: {msg}")
-                if ok and changed:
-                    external_volume.restart_wireplumber()
-            except Exception:
-                decky.logger.exception("Failed to start ExternalVolume server on boot")
 
         self._running_app = {"appid": None, "name": ""}
         self._update_cache = None

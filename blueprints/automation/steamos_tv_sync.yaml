@@ -21,6 +21,11 @@ blueprint:
     - Starting a Steam Link / Remote Play stream turns the TV off (only if
     it's on the right HDMI input); ending the stream turns it back on.
 
+    None of the above ever touches the TV while it's on and showing
+    something else (Netflix, live TV, another input) — including the guide
+    button and volume controls, which then do nothing until the TV is back
+    on the right input.
+
     Just pick your entities below — nothing else needs to be created
 
     (debouncing of the volume buttons already happens inside the plugin
@@ -82,9 +87,11 @@ blueprint:
     volume_buttons_entity:
       name: Volume buttons event entity (optional)
       description: >-
-        event.<device>_volume_buttons. Leave empty if volume buttons aren't
-        enabled in the Decky plugin.
-      default: ""
+        event.<device>_volume_buttons. Leave as-is (or clear it) if volume
+        buttons aren't enabled in the Decky plugin — it points at a
+        placeholder entity that doesn't exist, so the trigger just never
+        fires.
+      default: event.decky_mqtt_status_unconfigured
       selector:
         entity:
           filter:
@@ -92,8 +99,10 @@ blueprint:
             domain: event
     guide_button_entity:
       name: Guide/Steam button event entity (optional)
-      description: event.<device>_guide_button. Leave empty to disable this action.
-      default: ""
+      description: >-
+        event.<device>_guide_button. Leave as-is (or clear it) to disable
+        this action — see note above.
+      default: event.decky_mqtt_status_unconfigured
       selector:
         entity:
           filter:
@@ -102,9 +111,10 @@ blueprint:
     steam_streaming_sensor:
       name: Steam Link / Remote Play streaming sensor (optional)
       description: >-
-        binary_sensor.<device>_steam_link_streaming. Leave empty to disable
-        turning the TV off/on around Steam Link streaming sessions.
-      default: ""
+        binary_sensor.<device>_steam_link_streaming. Leave as-is (or clear
+        it) to disable turning the TV off/on around Steam Link streaming
+        sessions — see note above.
+      default: binary_sensor.decky_mqtt_status_unconfigured
       selector:
         entity:
           filter:
@@ -309,6 +319,18 @@ actions:
             id: steam_started
           - condition: template
             value_template: "{{ opt_steam_on_tv_on }}"
+          - condition: or
+            # Never touch the TV while it's on something other than our
+            # HDMI input (e.g. Netflix, live TV, another console) — only
+            # act if it's off or already on our input.
+            conditions:
+              - condition: state
+                entity_id: !input tv_player
+                state: "off"
+              - condition: state
+                entity_id: !input tv_player
+                attribute: source
+                state: !input tv_source
         sequence:
           - action: media_player.turn_on
             target:
@@ -369,6 +391,15 @@ actions:
       - conditions:
           - condition: trigger
             id: volume_up
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: !input tv_player
+                state: "off"
+              - condition: state
+                entity_id: !input tv_player
+                attribute: source
+                state: !input tv_source
         sequence:
           - action: media_player.volume_up
             target:
@@ -376,6 +407,15 @@ actions:
       - conditions:
           - condition: trigger
             id: volume_down
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: !input tv_player
+                state: "off"
+              - condition: state
+                entity_id: !input tv_player
+                attribute: source
+                state: !input tv_source
         sequence:
           - action: media_player.volume_down
             target:
@@ -383,6 +423,15 @@ actions:
       - conditions:
           - condition: trigger
             id: mute
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: !input tv_player
+                state: "off"
+              - condition: state
+                entity_id: !input tv_player
+                attribute: source
+                state: !input tv_source
         sequence:
           - action: media_player.volume_set
             target:
@@ -392,6 +441,15 @@ actions:
       - conditions:
           - condition: trigger
             id: guide_button
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: !input tv_player
+                state: "off"
+              - condition: state
+                entity_id: !input tv_player
+                attribute: source
+                state: !input tv_source
         sequence:
           - action: media_player.select_source
             target:
