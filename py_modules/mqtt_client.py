@@ -156,6 +156,11 @@ class MqttManager:
             self.topic("guide_button"), json.dumps({"event_type": kind}), qos=0, retain=False
         )
 
+    def publish_streaming(self, active: bool):
+        if not self._connected:
+            return
+        self._client.publish(self.topic("streaming"), "ON" if active else "OFF", qos=0, retain=True)
+
     def publish_app(self, appid, name: str):
         # appid None / name "" means nothing is running.
         if not self._connected:
@@ -379,6 +384,11 @@ class MqttManager:
             "icon": "mdi:dock-window",
             "state_topic": stats_topic,
             "value_template": "{{ 'ON' if value_json.docked else 'OFF' }}",
+        })
+        self._publish_entity("binary_sensor", "streaming", {
+            "name": "Steam Link Streaming",
+            "icon": "mdi:remote-tv",
+            "state_topic": self.topic("streaming"),
         })
         self._publish_entity("sensor", "current_app", {
             "name": "Current App",

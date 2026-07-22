@@ -87,6 +87,7 @@ const reportRunningApp = callable<[appid: number | null, name: string | null], v
   "set_running_app"
 );
 const checkUpdate = callable<[], UpdateInfo>("check_update");
+const reportStreaming = callable<[active: boolean], void>("set_streaming");
 
 function Content() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -101,6 +102,7 @@ function Content() {
   const [saving, setSaving] = useState(false);
   const [runningAppName, setRunningAppName] = useState<string>("");
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [streaming, setStreaming] = useState<boolean>(false);
 
   useEffect(() => {
     getSettings().then(setSettings);
@@ -130,6 +132,12 @@ function Content() {
     const guideListener = addEventListener<[kind: string]>("guide_button", (kind) => {
       setLastGuideButton(kind);
     });
+    const streamingListener = addEventListener<[active: boolean]>(
+      "streaming_changed",
+      (active) => {
+        setStreaming(active);
+      }
+    );
 
     setRunningAppName((Router.MainRunningApp as any)?.display_name ?? "");
     checkUpdate().then(setUpdate).catch(() => {});
@@ -144,6 +152,7 @@ function Content() {
       removeEventListener("stats_update", statsListener);
       removeEventListener("volume_button", buttonListener);
       removeEventListener("guide_button", guideListener);
+      removeEventListener("streaming_changed", streamingListener);
       clearInterval(poll);
     };
   }, []);
@@ -317,6 +326,9 @@ function Content() {
         <PanelSectionRow>
           <Field label="Running app">{runningAppName || "—"}</Field>
         </PanelSectionRow>
+        <PanelSectionRow>
+          <Field label="Steam Link streaming">{streaming ? "Yes" : "No"}</Field>
+        </PanelSectionRow>
         {lastGuideButton && (
           <PanelSectionRow>
             <Field label="Last Guide press">{lastGuideButton}</Field>
@@ -409,6 +421,32 @@ export default definePlugin(() => {
     console.error("mqtt-status: failed to register app lifetime hook", e);
   }
 
+  // Steam Link / Remote Play: report streaming state over MQTT so Home
+  // Assistant can react (e.g. turn the TV off while streaming elsewhere).
+  // Uses SteamClient.RemotePlay.RegisterForDevicesChanges, an undocumented,
+  // community-reverse-engineered API (no official one exists) — reverify
+  // after major Steam client updates. A device's status is "Streaming" only
+  // while this device is actively streaming its output to it; "Connected"/
+  // "Paired" just describe pairing state and don't mean a stream is active.
+  let devicesHook: { unregister?: () => void } | undefined;
+  try {
+    devicesHook = (SteamClient as any)?.RemotePlay?.RegisterForDevicesChanges?.(
+      (devices: any[]) => {
+        try {
+          const anyStreaming =
+            Array.isArray(devices) && devices.some((d) => d?.status === "Streaming");
+          reportStreaming(anyStreaming).catch((e: unknown) =>
+            console.error("mqtt-status: reportStreaming failed", e)
+          );
+        } catch (e) {
+          console.error("mqtt-status: devices-changed handler failed", e);
+        }
+      }
+    );
+  } catch (e) {
+    console.error("mqtt-status: failed to register DevicesChanges hook", e);
+  }
+
   // One-time toast per Steam session if a plugin update is available.
   const updateToastTimer = setTimeout(() => {
     checkUpdate()
@@ -431,6 +469,7 @@ export default definePlugin(() => {
     onDismount() {
       clearTimeout(updateToastTimer);
       lifetimeHook?.unregister?.();
+      devicesHook?.unregister?.();
     },
   };
 });

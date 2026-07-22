@@ -212,6 +212,12 @@ class Plugin:
         self._running_app = {"appid": appid, "name": name or ""}
         self.mqtt.publish_app(appid, name or "")
 
+    async def set_streaming(self, active: bool):
+        """Called by the frontend when a Steam Link / Remote Play device's status
+        changes to/from "Streaming" (SteamClient.RemotePlay.RegisterForDevicesChanges)."""
+        self.mqtt.publish_streaming(active)
+        await decky.emit("streaming_changed", active)
+
     async def check_update(self) -> dict:
         now = time.monotonic()
         if self._update_cache and now - self._update_cache[0] < 3600:

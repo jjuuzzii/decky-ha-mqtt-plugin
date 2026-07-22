@@ -26,6 +26,9 @@ between devices, all over MQTT.
   not the internal panel) is currently connected.
 - **Current app sensor**: shows which game/app is running right now (including non-Steam
   shortcuts), for automations like "dim the lights when a game starts".
+- **Steam Link / Remote Play streaming sensor**: reflects whether the device is currently
+  streaming to a Steam Link client, so the [TV sync blueprint](#full-tvavr-sync-quasi-hdmi-cec)
+  can turn the TV off while you play elsewhere and back on when you're done.
 - **Update notifications**: the plugin checks GitHub for new releases — you get a toast in
   Game Mode, an update notice in the plugin panel, and an update entity in Home Assistant.
 - **Home Assistant MQTT discovery**: all sensors, a Power (on/off) binary sensor and
@@ -88,16 +91,19 @@ by hand:
 - TV turns off → Steam device suspends
 - Volume buttons on the Steam controller → control the TV's volume; guide/Steam button →
   switches the TV to the HDMI input
+- Steam Link / Remote Play streaming starts → TV turns off (only if it's on the right
+  HDMI input); streaming stops → TV turns back on
 
 **Setup:** creating the automation from the blueprint only asks for entities — power
 sensor, suspend button, wake button, TV, MAC address, and optionally the volume/guide
-button event entities. Nothing else needs to be created; volume-button debouncing runs
-inside the plugin itself.
+button and Steam Link streaming sensor entities. Nothing else needs to be created;
+volume-button debouncing runs inside the plugin itself.
 
 **Advanced (optional, collapsed by default):**
 
 - *Delays* — how long a state must hold before it's acted on (default 5 s each)
-- *Sync options* — turn any of the five behaviors above on/off independently
+- *Sync options* — turn any of the five behaviors above on/off independently (volume/guide
+  button control isn't gated by a toggle — leave those entities empty to disable them)
 
 Both default to the behavior described above, so you only need to open them if you want
 something different. This needs Wake-on-LAN set up — see the next section.
@@ -170,10 +176,16 @@ With the default base topic `decky/steamdeck` (configurable):
 | `<base>/volume/button`           | `{"event_type": "volume_up"}`    | Event per +/- press (also `volume_down`, `mute_toggle`), debounced in the plugin |
 | `<base>/guide_button`            | `{"event_type": "press"}`        | Event per controller Steam/guide button press |
 | `<base>/app`                     | `{"appid": 123, "name": "…"}`    | Retained; currently running game/app (empty name = idle) |
+| `<base>/streaming`               | `ON` / `OFF`                     | Retained; Steam Link / Remote Play session active (see note below) |
 | `<base>/update`                  | JSON                             | Retained; installed/latest plugin version for the HA update entity |
 | `<base>/power/set` (subscribe)   | `suspend` / `shutdown` / `reboot`| Executes the action; `wake` is ignored by the plugin (handled by HA, see above) |
 
 `stats` also includes `"docked": true/false`.
+
+> **Note on `streaming`**: detected via an undocumented, community-reverse-engineered
+> SteamClient API (`SteamClient.RemotePlay.RegisterForDevicesChanges`, watching for a paired
+> device's status becoming `"Streaming"`) since Valve doesn't publish an official one — it
+> may stop working correctly after a Steam client update.
 
 ## Building from source
 

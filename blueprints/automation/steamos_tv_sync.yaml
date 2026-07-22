@@ -12,17 +12,21 @@ blueprint:
 
     - Turning the Steam device off turns the TV off.
 
-    - Turning the TV off suspends the Steam device.
+    - Turning the TV off suspends the Steam device (not while a Steam Link
+    stream is active — see below).
 
     - The Steam controller's volume buttons control the TV's volume, and the
     guide/Steam button switches the TV to the HDMI input.
+
+    - Starting a Steam Link / Remote Play stream turns the TV off (only if
+    it's on the right HDMI input); ending the stream turns it back on.
 
     Just pick your entities below — nothing else needs to be created
 
     (debouncing of the volume buttons already happens inside the plugin
     itself). Two collapsed sections let you fine-tune things further:
     "Delays" (how long a state must hold before reacting, default 5 s each)
-    and "Sync options" (turn any of the four on/off couplings above off
+    and "Sync options" (turn any of the five on/off couplings above off
     individually) — both default to the behavior described above.
 
     Requirements: `wake_on_lan:` in configuration.yaml, and Wake-on-LAN
@@ -37,19 +41,26 @@ blueprint:
       description: The Decky plugin's power sensor (binary_sensor.<device>_power).
       selector:
         entity:
-          domain: binary_sensor
+          filter:
+            integration: mqtt
+            domain: binary_sensor
+            device_class: power
     steam_suspend_button:
       name: Steam device suspend button
       description: The Decky plugin's suspend button (button.<device>_suspend).
       selector:
         entity:
-          domain: button
+          filter:
+            integration: mqtt
+            domain: button
     steam_wake_button:
       name: Steam device wake button
       description: The Decky plugin's wake button (button.<device>_wake).
       selector:
         entity:
-          domain: button
+          filter:
+            integration: mqtt
+            domain: button
     steam_mac:
       name: Steam device MAC address
       description: Used to send the Wake-on-LAN magic packet.
@@ -76,14 +87,29 @@ blueprint:
       default: ""
       selector:
         entity:
-          domain: event
+          filter:
+            integration: mqtt
+            domain: event
     guide_button_entity:
       name: Guide/Steam button event entity (optional)
       description: event.<device>_guide_button. Leave empty to disable this action.
       default: ""
       selector:
         entity:
-          domain: event
+          filter:
+            integration: mqtt
+            domain: event
+    steam_streaming_sensor:
+      name: Steam Link / Remote Play streaming sensor (optional)
+      description: >-
+        binary_sensor.<device>_steam_link_streaming. Leave empty to disable
+        turning the TV off/on around Steam Link streaming sessions.
+      default: ""
+      selector:
+        entity:
+          filter:
+            integration: mqtt
+            domain: binary_sensor
 
     delays:
       name: Delays
@@ -135,6 +161,28 @@ blueprint:
               step: 1
               unit_of_measurement: s
               mode: box
+        wait_streaming_start:
+          name: Steam Link streaming started
+          description: Before the TV is turned off.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 300
+              step: 1
+              unit_of_measurement: s
+              mode: box
+        wait_streaming_stop:
+          name: Steam Link streaming stopped
+          description: Before the TV is turned back on.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 300
+              step: 1
+              unit_of_measurement: s
+              mode: box
 
     options:
       name: Sync options
@@ -162,6 +210,11 @@ blueprint:
           default: true
           selector:
             boolean: {}
+        opt_streaming_tv_sync:
+          name: Steam Link streaming starts/stops → turn TV off/on
+          default: true
+          selector:
+            boolean: {}
 
 variables:
   tv_source: !input tv_source
@@ -169,6 +222,8 @@ variables:
   opt_tv_hdmi_wake: !input opt_tv_hdmi_wake
   opt_steam_off_tv_off: !input opt_steam_off_tv_off
   opt_tv_off_steam_suspend: !input opt_tv_off_steam_suspend
+  opt_streaming_tv_sync: !input opt_streaming_tv_sync
+  steam_streaming_sensor: !input steam_streaming_sensor
 
 triggers:
   - trigger: state
@@ -232,6 +287,18 @@ triggers:
     not_from:
       - unknown
     id: wake_button
+  - trigger: state
+    entity_id: !input steam_streaming_sensor
+    to: "on"
+    for:
+      seconds: !input wait_streaming_start
+    id: streaming_started
+  - trigger: state
+    entity_id: !input steam_streaming_sensor
+    to: "off"
+    for:
+      seconds: !input wait_streaming_stop
+    id: streaming_stopped
 
 conditions: []
 
@@ -288,6 +355,13 @@ actions:
           - condition: state
             entity_id: !input steam_power_sensor
             state: "on"
+          - condition: template
+            # Don't suspend if the TV just went off because of our own
+            # streaming_started action above — that's expected, not a
+            # "the user turned the TV off" signal.
+            value_template: >-
+              {{ steam_streaming_sensor == '' or
+                 not is_state(steam_streaming_sensor, 'on') }}
         sequence:
           - action: button.press
             target:
@@ -331,6 +405,40 @@ actions:
           - action: wake_on_lan.send_magic_packet
             data:
               mac: !input steam_mac
+      - conditions:
+          - condition: trigger
+            id: streaming_started
+          - condition: template
+            value_template: "{{ opt_streaming_tv_sync }}"
+          - condition: state
+            entity_id: !input tv_player
+            state: "on"
+          - condition: state
+            entity_id: !input tv_player
+            attribute: source
+            state: !input tv_source
+        sequence:
+          - action: media_player.turn_off
+            target:
+              entity_id: !input tv_player
+      - conditions:
+          - condition: trigger
+            id: streaming_stopped
+          - condition: template
+            value_template: "{{ opt_streaming_tv_sync }}"
+          - condition: state
+            entity_id: !input tv_player
+            state: "off"
+        sequence:
+          - action: media_player.turn_on
+            target:
+              entity_id: !input tv_player
+          - delay: "00:00:06"
+          - action: media_player.select_source
+            target:
+              entity_id: !input tv_player
+            data:
+              source: !input tv_source
 
 mode: parallel
 max: 10
